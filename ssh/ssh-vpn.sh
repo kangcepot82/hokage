@@ -1,449 +1,258 @@
 #!/bin/bash
-# initializing var
-export DEBIAN_FRONTEND=noninteractive
-MYIP=$(wget -qO- ipinfo.io/ip);
-MYIP2="s/xxxxxxxxx/$MYIP/g";
-NET=$(ip -o $ANU -4 route show to default | awk '{print $5}');
-source /etc/os-release
-ver=$VERSION_ID
+dateFromServer=$(curl -v --insecure --silent https://google.com/ 2>&1 | grep Date | sed -e 's/< Date: //')
+biji=`date +"%Y-%m-%d" -d "$dateFromServer"`
+#########################
 
-#detail nama perusahaan
-country=ID
-state=Indonesia
-locality=none
-organization=none
-organizationalunit=none
-commonname=none
-email=adamspx17@gmail.com
+clear
+red='\e[1;31m'
+green='\e[0;32m'
+yell='\e[1;33m'
+tyblue='\e[1;36m'
+NC='\e[0m'
+purple() { echo -e "\\033[35;1m${*}\\033[0m"; }
+tyblue() { echo -e "\\033[36;1m${*}\\033[0m"; }
+yellow() { echo -e "\\033[33;1m${*}\\033[0m"; }
+green() { echo -e "\\033[32;1m${*}\\033[0m"; }
+red() { echo -e "\\033[31;1m${*}\\033[0m"; }
+cd /root
+#System version number
+if [ "${EUID}" -ne 0 ]; then
+		echo "You need to run this script as root"
+		exit 1
+fi
+if [ "$(systemd-detect-virt)" == "openvz" ]; then
+		echo "OpenVZ is not supported"
+		exit 1
+fi
 
-# simple password minimal
-curl -sS https://raw.githubusercontent.com/artanodrop/v4/main/ssh/password | openssl aes-256-cbc -d -a -pass pass:scvps07gg -pbkdf2 > /etc/pam.d/common-password
-chmod +x /etc/pam.d/common-password
+localip=$(hostname -I | cut -d\  -f1)
+hst=( `hostname` )
+dart=$(cat /etc/hosts | grep -w `hostname` | awk '{print $2}')
+if [[ "$hst" != "$dart" ]]; then
+echo "$localip $(hostname)" >> /etc/hosts
+fi
 
-# go to root
-cd
+mkdir -p /etc/xray
+mkdir -p /etc/v2ray
+touch /etc/xray/domain
+touch /etc/v2ray/domain
+touch /etc/xray/scdomain
+touch /etc/v2ray/scdomain
 
-# Edit file /etc/systemd/system/rc-local.service
-cat > /etc/systemd/system/rc-local.service <<-END
-[Unit]
-Description=/etc/rc.local
-ConditionPathExists=/etc/rc.local
-[Service]
-Type=forking
-ExecStart=/etc/rc.local start
-TimeoutSec=0
-StandardOutput=tty
-RemainAfterExit=yes
-SysVStartPriority=99
-[Install]
-WantedBy=multi-user.target
-END
 
-# nano /etc/rc.local
-cat > /etc/rc.local <<-END
-#!/bin/sh -e
-# rc.local
-# By default this script does nothing.
-exit 0
-END
+echo -e "[ ${tyblue}NOTES${NC} ] Before we go.. "
+sleep 1
+echo -e "[ ${tyblue}NOTES${NC} ] I need check your headers first.."
+sleep 2
+echo -e "[ ${green}INFO${NC} ] Checking headers"
+sleep 1
+totet=`uname -r`
+REQUIRED_PKG="linux-headers-$totet"
+PKG_OK=$(dpkg-query -W --showformat='${Status}\n' $REQUIRED_PKG|grep "install ok installed")
+echo Checking for $REQUIRED_PKG: $PKG_OK
+if [ "" = "$PKG_OK" ]; then
+  sleep 2
+  echo -e "[ ${yell}WARNING${NC} ] Try to install ...."
+  echo "No $REQUIRED_PKG. Setting up $REQUIRED_PKG."
+  apt-get --yes install $REQUIRED_PKG
+  sleep 1
+  echo ""
+  sleep 1
+  echo -e "[ ${tyblue}NOTES${NC} ] If error you need.. to do this"
+  sleep 1
+  echo ""
+  sleep 1
+  echo -e "[ ${tyblue}NOTES${NC} ] 1. apt update -y"
+  sleep 1
+  echo -e "[ ${tyblue}NOTES${NC} ] 2. apt upgrade -y"
+  sleep 1
+  echo -e "[ ${tyblue}NOTES${NC} ] 3. apt dist-upgrade -y"
+  sleep 1
+  echo -e "[ ${tyblue}NOTES${NC} ] 4. reboot"
+  sleep 1
+  echo ""
+  sleep 1
+  echo -e "[ ${tyblue}NOTES${NC} ] After rebooting"
+  sleep 1
+  echo -e "[ ${tyblue}NOTES${NC} ] Then run this script again"
+  echo -e "[ ${tyblue}NOTES${NC} ] if you understand then tap enter now"
+  read
+else
+  echo -e "[ ${green}INFO${NC} ] Oke installed"
+fi
 
-# Ubah izin akses
-chmod +x /etc/rc.local
+ttet=`uname -r`
+ReqPKG="linux-headers-$ttet"
+if ! dpkg -s $ReqPKG  >/dev/null 2>&1; then
+  rm /root/setup.sh >/dev/null 2>&1 
+  exit
+else
+  clear
+fi
 
-# enable rc local
-systemctl enable rc-local
-systemctl start rc-local.service
 
-# disable ipv6
-echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6
-sed -i '$ i\echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6' /etc/rc.local
-
-#update
-apt update -y
-apt upgrade -y
-apt dist-upgrade -y
-apt-get remove --purge ufw firewalld -y
-apt-get remove --purge exim4 -y
-
-#install jq
-apt -y install jq
-
-#install shc
-apt -y install shc
-
-# install wget and curl
-apt -y install wget curl
-
-#figlet
-apt-get install figlet -y
-apt-get install ruby -y
-gem install lolcat
-
-# set time GMT +7
+secs_to_human() {
+    echo "Installation time : $(( ${1} / 3600 )) hours $(( (${1} / 60) % 60 )) minute's $(( ${1} % 60 )) seconds"
+}
+start=$(date +%s)
 ln -fs /usr/share/zoneinfo/Asia/Jakarta /etc/localtime
+sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null 2>&1
+sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null 2>&1
 
-# set locale
-sed -i 's/AcceptEnv/#AcceptEnv/g' /etc/ssh/sshd_config
+coreselect=''
+cat> /root/.profile << END
+# ~/.profile: executed by Bourne-compatible login shells.
 
+if [ "$BASH" ]; then
+  if [ -f ~/.bashrc ]; then
+    . ~/.bashrc
+  fi
+fi
 
-install_ssl(){
-    if [ -f "/usr/bin/apt-get" ];then
-            isDebian=`cat /etc/issue|grep Debian`
-            if [ "$isDebian" != "" ];then
-                    apt-get install -y nginx certbot
-                    apt install -y nginx certbot
-                    sleep 3s
-            else
-                    apt-get install -y nginx certbot
-                    apt install -y nginx certbot
-                    sleep 3s
-            fi
+mesg n || true
+clear
+END
+chmod 644 /root/.profile
+
+echo -e "[ ${green}INFO${NC} ] Preparing the install file"
+apt install git curl -y >/dev/null 2>&1
+apt install python -y >/dev/null 2>&1
+echo -e "[ ${green}INFO${NC} ] Aight good ... installation file is ready"
+sleep 2
+echo -ne "[ ${green}INFO${NC} ] Check permission : "
+
+mkdir -p /var/lib/SIJA >/dev/null 2>&1
+echo "IP=" >> /var/lib/SIJA/ipvps.conf
+
+echo ""
+wget -q https://raw.githubusercontent.com/artanodrop/v4/main/tools.sh;chmod +x tools.sh;./tools.sh
+rm tools.sh
+clear
+yellow "Add Domain for vmess/vless/trojan dll"
+echo " "
+read -rp "Input ur domain : " -e pp
+    if [ -z $pp ]; then
+        echo -e "
+        Nothing input for domain!
+        Then a random domain will be created"
     else
-        yum install -y nginx certbot
-        sleep 3s
+        echo "$pp" > /root/scdomain
+	echo "$pp" > /etc/xray/scdomain
+	echo "$pp" > /etc/xray/domain
+	echo "$pp" > /etc/v2ray/domain
+	echo $pp > /root/domain
+        echo "IP=$pp" > /var/lib/SIJA/ipvps.conf
     fi
-
-    systemctl stop nginx.service
-
-    if [ -f "/usr/bin/apt-get" ];then
-            isDebian=`cat /etc/issue|grep Debian`
-            if [ "$isDebian" != "" ];then
-                    echo "A" | certbot certonly --renew-by-default --register-unsafely-without-email --standalone -d $domain
-                    sleep 3s
-            else
-                    echo "A" | certbot certonly --renew-by-default --register-unsafely-without-email --standalone -d $domain
-                    sleep 3s
-            fi
-    else
-        echo "Y" | certbot certonly --renew-by-default --register-unsafely-without-email --standalone -d $domain
-        sleep 3s
-    fi
+    
+#install ssh ovpn
+echo -e "\e[33m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
+echo -e "$green      Install SSH / WS               $NC"
+echo -e "\e[33m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
+sleep 2
+clear
+wget https://raw.githubusercontent.com/Fikripps/Ver3/main/ssh/ssh-vpn.sh && chmod +x ssh-vpn.sh && ./ssh-vpn.sh
+### Pasang Rclone
+function pasang_backup() {
+    judge "Memasang backup server"
+    wget https://raw.githubusercontent.com/artanodrop/v4/main/backup/set-br.sh &&  chmod +x set-br.sh && ./set-br.sh >/dev/null 2>&1
+    print_success "backup server"
 }
 
-# install webserver
-apt -y install nginx
-cd
-rm /etc/nginx/sites-enabled/default
-rm /etc/nginx/sites-available/default
-wget -O /etc/nginx/nginx.conf "https://raw.githubusercontent.com/artanodrop/v4/main/ssh/nginx.conf"
-mkdir -p /home/vps/public_html
-/etc/init.d/nginx restart
-
-# install badvpn
-cd
-wget -O /usr/bin/badvpn-udpgw "https://raw.githubusercontent.com/artanodrop/v4/main/ssh/newudpgw"
-chmod +x /usr/bin/badvpn-udpgw
-sed -i '$ i\screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7100 --max-clients 500' /etc/rc.local
-sed -i '$ i\screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7200 --max-clients 500' /etc/rc.local
-sed -i '$ i\screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7300 --max-clients 500' /etc/rc.local
-screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7100 --max-clients 500
-screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7200 --max-clients 500
-screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7300 --max-clients 500
-screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7400 --max-clients 500
-screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7500 --max-clients 500
-screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7600 --max-clients 500
-screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7700 --max-clients 500
-screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7800 --max-clients 500
-screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7900 --max-clients 500
-
-# setting port ssh
-cd
-sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
-sed -i '/Port 22/a Port 500' /etc/ssh/sshd_config
-sed -i '/Port 22/a Port 40000' /etc/ssh/sshd_config
-sed -i '/Port 22/a Port 51443' /etc/ssh/sshd_config
-sed -i '/Port 22/a Port 58080' /etc/ssh/sshd_config
-sed -i '/Port 22/a Port 200' /etc/ssh/sshd_config
-sed -i '/Port 22/a Port 22' /etc/ssh/sshd_config
-/etc/init.d/ssh restart
-
-echo "=== Install Dropbear ==="
-# install dropbear
-apt -y install dropbear
-sed -i 's/NO_START=1/NO_START=0/g' /etc/default/dropbear
-sed -i 's/DROPBEAR_PORT=22/DROPBEAR_PORT=143/g' /etc/default/dropbear
-sed -i 's/DROPBEAR_EXTRA_ARGS=/DROPBEAR_EXTRA_ARGS="-p 50000 -p 109 -p 110 -p 69"/g' /etc/default/dropbear
-echo "/bin/false" >> /etc/shells
-echo "/usr/sbin/nologin" >> /etc/shells
-/etc/init.d/ssh restart
-/etc/init.d/dropbear restart
-
-cd
-# install stunnel
-apt install stunnel4 -y
-cat > /etc/stunnel/stunnel.conf <<-END
-cert = /etc/stunnel/stunnel.pem
-client = no
-socket = a:SO_REUSEADDR=1
-socket = l:TCP_NODELAY=1
-socket = r:TCP_NODELAY=1
-
-[dropbear]
-accept = 222
-connect = 127.0.0.1:22
-
-[dropbear]
-accept = 777
-connect = 127.0.0.1:109
-
-[ws-stunnel]
-accept = 2096
-connect = 700
-
-[openvpn]
-accept = 442
-connect = 127.0.0.1:1194
-
-END
-
-# make a certificate
-openssl genrsa -out key.pem 2048
-openssl req -new -x509 -key key.pem -out cert.pem -days 1095 \
--subj "/C=$country/ST=$state/L=$locality/O=$organization/OU=$organizationalunit/CN=$commonname/emailAddress=$email"
-cat key.pem cert.pem >> /etc/stunnel/stunnel.pem
-
-# konfigurasi stunnel
-sed -i 's/ENABLED=0/ENABLED=1/g' /etc/default/stunnel4
-/etc/init.d/stunnel4 restart
-
-
-# install fail2ban
-apt -y install fail2ban
-
-# Instal DDOS Flate
-if [ -d '/usr/local/ddos' ]; then
-	echo; echo; echo "Please un-install the previous version first"
-	exit 0
-else
-	mkdir /usr/local/ddos
-fi
+#Instal Xray
+echo -e "\e[33m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
+echo -e "$green          Install XRAY              $NC"
+echo -e "\e[33m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
+sleep 2
 clear
-echo; echo 'Installing DOS-Deflate 0.6'; echo
-echo; echo -n 'Downloading source files...'
-wget -q -O /usr/local/ddos/ddos.conf http://www.inetbase.com/scripts/ddos/ddos.conf
-echo -n '.'
-wget -q -O /usr/local/ddos/LICENSE http://www.inetbase.com/scripts/ddos/LICENSE
-echo -n '.'
-wget -q -O /usr/local/ddos/ignore.ip.list http://www.inetbase.com/scripts/ddos/ignore.ip.list
-echo -n '.'
-wget -q -O /usr/local/ddos/ddos.sh http://www.inetbase.com/scripts/ddos/ddos.sh
-chmod 0755 /usr/local/ddos/ddos.sh
-cp -s /usr/local/ddos/ddos.sh /usr/local/sbin/ddos
-echo '...done'
-echo; echo -n 'Creating cron to run script every minute.....(Default setting)'
-/usr/local/ddos/ddos.sh --cron > /dev/null 2>&1
-echo '.....done'
-echo; echo 'Installation has completed.'
-echo 'Config file is at /usr/local/ddos/ddos.conf'
-echo 'Please send in your comments and/or suggestions to zaf@vsnl.com'
+wget https://raw.githubusercontent.com/artanodrop/v4/main/xray/ins-xray.sh && chmod +x ins-xray.sh && ./ins-xray.sh
+wget https://raw.githubusercontent.com/artanodrop/v4/main/sshws/insshws.sh && chmod +x insshws.sh && ./insshws.sh
+clear
+cat> /root/.profile << END
+# ~/.profile: executed by Bourne-compatible login shells.
 
-# banner /etc/issue.net
-sleep 1
-echo -e "[ ${green}INFO$NC ] Settings banner"
-wget -q -O /etc/issue.net "https://raw.githubusercontent.com/kangcepot82/hokage/main/issue.net"
-chmod +x /etc/issue.net
-echo "Banner /etc/issue.net" >> /etc/ssh/sshd_config
-sed -i 's@DROPBEAR_BANNER=""@DROPBEAR_BANNER="/etc/issue.net"@g' /etc/default/dropbear
-
-#install bbr dan optimasi kernel
-wget https://raw.githubusercontent.com/artanodrop/v4/main/ssh/bbr.sh && chmod +x bbr.sh && ./bbr.sh
-
-# blockir torrent
-iptables -A FORWARD -m string --string "get_peers" --algo bm -j DROP
-iptables -A FORWARD -m string --string "announce_peer" --algo bm -j DROP
-iptables -A FORWARD -m string --string "find_node" --algo bm -j DROP
-iptables -A FORWARD -m string --algo bm --string "BitTorrent" -j DROP
-iptables -A FORWARD -m string --algo bm --string "BitTorrent protocol" -j DROP
-iptables -A FORWARD -m string --algo bm --string "peer_id=" -j DROP
-iptables -A FORWARD -m string --algo bm --string ".torrent" -j DROP
-iptables -A FORWARD -m string --algo bm --string "announce.php?passkey=" -j DROP
-iptables -A FORWARD -m string --algo bm --string "torrent" -j DROP
-iptables -A FORWARD -m string --algo bm --string "announce" -j DROP
-iptables -A FORWARD -m string --algo bm --string "info_hash" -j DROP
-iptables-save > /etc/iptables.up.rules
-iptables-restore -t < /etc/iptables.up.rules
-netfilter-persistent save
-netfilter-persistent reload
-
-# download script
-cd /usr/bin
-# menu
-wget -O menu "https://raw.githubusercontent.com/kangcepot82/hokage/main/menu/menu.sh"
-wget -O menu-trial "https://raw.githubusercontent.com/kangcepot82/hokage/main/menu/menu-trial.sh"
-wget -O menu-vmess "https://raw.githubusercontent.com/kangcepot82/hokage/main/menu/menu-vmess.sh"
-wget -O menu-vless "https://raw.githubusercontent.com/kangcepot82/hokage/main/menu/menu-vless.sh"
-wget -O running "https://raw.githubusercontent.com/artanodrop/v4/main/menu/running.sh"
-wget -O clearcache "https://raw.githubusercontent.com/kangcepot82/hokage/main/menu/clearcache.sh"
-wget -O menu-trgo "https://raw.githubusercontent.com/artanodrop/v4/main/menu/menu-trgo.sh"
-wget -O menu-trojan "https://raw.githubusercontent.com/kangcepot82/hokage/main/menu/menu-trojan.sh"
-
-# menu ssh ovpn
-wget -O menu-ssh "https://raw.githubusercontent.com/kangcepot82/hokage/main/menu/menu-ssh.sh"
-wget -O usernew "https://raw.githubusercontent.com/artanodrop/v4/main/ssh/usernew.sh"
-wget -O trial "https://raw.githubusercontent.com/artanodrop/v4/main/ssh/trial.sh"
-wget -O renew "https://raw.githubusercontent.com/artanodrop/v4/main/ssh/renew.sh"
-wget -O hapus "https://raw.githubusercontent.com/artanodrop/v4/main/ssh/hapus.sh"
-wget -O cek "https://raw.githubusercontent.com/artanodrop/v4/main/ssh/cek.sh"
-wget -O member "https://raw.githubusercontent.com/artanodrop/v4/main/ssh/member.sh"
-wget -O delete "https://raw.githubusercontent.com/artanodrop/v4/main/ssh/delete.sh"
-wget -O autokill "https://raw.githubusercontent.com/artanodrop/v4/main/ssh/autokill.sh"
-wget -O ceklim "https://raw.githubusercontent.com/artanodrop/v4/main/ssh/ceklim.sh"
-wget -O tendang "https://raw.githubusercontent.com/artanodrop/v4/main/ssh/tendang.sh"
-
-# menu system
-wget -O menu-set "https://raw.githubusercontent.com/kangcepot82/hokage/main/menu/menu-set.sh"
-wget -O menu-domain "https://raw.githubusercontent.com/artanodrop/v4/main/menu/menu-domain.sh"
-wget -O add-host "https://raw.githubusercontent.com/artanodrop/v4/main/ssh/add-host.sh"
-wget -O port-change "https://raw.githubusercontent.com/artanodrop/v4/main/port/port-change.sh"
-wget -O certv2ray "https://raw.githubusercontent.com/artanodrop/v4/main/xray/certv2ray.sh"
-wget -O menu-webmin "https://raw.githubusercontent.com/artanodrop/v4/main/menu/menu-webmin.sh"
-wget -O speedtest "https://raw.githubusercontent.com/artanodrop/v4/main/ssh/speedtest_cli.py"
-wget -O about "https://raw.githubusercontent.com/kangcepot82/hokage/main/menu/about.sh"
-wget -O auto-reboot "https://raw.githubusercontent.com/artanodrop/v4/main/menu/auto-reboot.sh"
-wget -O restart "https://raw.githubusercontent.com/artanodrop/v4/main/menu/restart.sh"
-wget -O bw "https://raw.githubusercontent.com/artanodrop/v4/main/menu/bw.sh"
-
-# change port
-wget -O port-ssl "https://raw.githubusercontent.com/artanodrop/v4/main/port/port-ssl.sh"
-wget -O port-ovpn "https://raw.githubusercontent.com/artanodrop/v4/main/port/port-ovpn.sh"
-
-
-wget -O xp "https://raw.githubusercontent.com/artanodrop/v4/main/ssh/xp.sh"
-wget -O acs-set "https://raw.githubusercontent.com/artanodrop/v4/main/acs-set.sh"
-
-wget -O sshws "https://raw.githubusercontent.com/artanodrop/v4/main/ssh/sshws.sh"
-wget -O status "https://raw.githubusercontent.com/artanodrop/v4/main/status.sh"
-wget -O menu-bckp "https://raw.githubusercontent.com/Fikripps/Ver3/main/menu/menu-bckp.sh"
-wget -O backup "https://raw.githubusercontent.com/artanodrop/v4/main/backup/backup.sh"
-wget -O restore "https://raw.githubusercontent.com/artanodrop/v4/main/backup/restore.sh"
-
-wget -O jam "https://raw.githubusercontent.com/artanodrop/v4/main/jam.sh"
-
-chmod +x menu
-chmod +x menu-trial
-chmod +x menu-vmess
-chmod +x menu-vless
-chmod +x running
-chmod +x clearcache
-chmod +x menu-trgo
-chmod +x menu-trojan
-
-chmod +x menu-ssh
-chmod +x usernew
-chmod +x trial
-chmod +x renew
-chmod +x hapus
-chmod +x cek
-chmod +x member
-chmod +x delete
-chmod +x autokill
-chmod +x ceklim
-chmod +x tendang
-
-chmod +x menu-set
-chmod +x menu-domain
-chmod +x add-host
-chmod +x port-change
-chmod +x certv2ray
-chmod +x menu-webmin
-chmod +x speedtest
-chmod +x about
-chmod +x auto-reboot
-chmod +x restart
-chmod +x bw
-
-chmod +x port-ssl
-chmod +x port-ovpn
-
-chmod +x xp
-chmod +x acs-set
-chmod +x sshws
-chmod +x status
-chmod +x menu-bckp
-chmod +x backup
-chmod +x restore
-chmod +x jam
-cd
-
-
-cat > /etc/cron.d/re_otm <<-END
-SHELL=/bin/sh
-PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-0 2 * * * root /sbin/reboot
-END
-
-cat > /etc/cron.d/xp_otm <<-END
-SHELL=/bin/sh
-PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-0 0 * * * root /usr/bin/xp
-END
-
-cat > /home/re_otm <<-END
-7
-END
-
-service cron restart >/dev/null 2>&1
-service cron reload >/dev/null 2>&1
-
-# remove unnecessary files
-sleep 1
-echo -e "[ ${green}INFO$NC ] Clearing trash"
-apt autoclean -y >/dev/null 2>&1
-
-if dpkg -s unscd >/dev/null 2>&1; then
-apt -y remove --purge unscd >/dev/null 2>&1
+if [ "$BASH" ]; then
+  if [ -f ~/.bashrc ]; then
+    . ~/.bashrc
+  fi
 fi
 
-apt-get -y --purge remove samba* >/dev/null 2>&1
-apt-get -y --purge remove apache2* >/dev/null 2>&1
-apt-get -y --purge remove bind9* >/dev/null 2>&1
-apt-get -y remove sendmail* >/dev/null 2>&1
-apt autoremove -y >/dev/null 2>&1
-# finishing
-cd
-chown -R www-data:www-data /home/vps/public_html
-sleep 1
-echo -e "$yell[SERVICE]$NC Restart All service SSH & OVPN"
-/etc/init.d/nginx restart >/dev/null 2>&1
-sleep 1
-echo -e "[ ${green}ok${NC} ] Restarting nginx"
-/etc/init.d/openvpn restart >/dev/null 2>&1
-sleep 1
-echo -e "[ ${green}ok${NC} ] Restarting cron "
-/etc/init.d/ssh restart >/dev/null 2>&1
-sleep 1
-echo -e "[ ${green}ok${NC} ] Restarting ssh "
-/etc/init.d/dropbear restart >/dev/null 2>&1
-sleep 1
-echo -e "[ ${green}ok${NC} ] Restarting dropbear "
-/etc/init.d/fail2ban restart >/dev/null 2>&1
-sleep 1
-echo -e "[ ${green}ok${NC} ] Restarting fail2ban "
-/etc/init.d/stunnel4 restart >/dev/null 2>&1
-sleep 1
-echo -e "[ ${green}ok${NC} ] Restarting stunnel4 "
-/etc/init.d/vnstat restart >/dev/null 2>&1
-sleep 1
-echo -e "[ ${green}ok${NC} ] Restarting vnstat "
-/etc/init.d/squid restart >/dev/null 2>&1
+mesg n || true
+clear
+menu
+END
+chmod 644 /root/.profile
 
-screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7100 --max-clients 500
-screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7200 --max-clients 500
-screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7300 --max-clients 500
-screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7400 --max-clients 500
-screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7500 --max-clients 500
-screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7600 --max-clients 500
-screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7700 --max-clients 500
-screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7800 --max-clients 500
-screen -dmS badvpn badvpn-udpgw --listen-addr 127.0.0.1:7900 --max-clients 500
+if [ -f "/root/log-install.txt" ]; then
+rm /root/log-install.txt > /dev/null 2>&1
+fi
+if [ -f "/etc/afak.conf" ]; then
+rm /etc/afak.conf > /dev/null 2>&1
+fi
+if [ ! -f "/etc/log-create-user.log" ]; then
+echo "Log All Account " > /etc/log-create-user.log
+fi
 history -c
-echo "unset HISTFILE" >> /etc/profile
-
-
-rm -f /root/key.pem
-rm -f /root/cert.pem
-rm -f /root/ssh-vpn.sh
-rm -f /root/bbr.sh
-
-# finihsing
-clear
+echo $serverV > /opt/.ver
+aureb=$(cat /home/re_otm)
+b=11
+if [ $aureb -gt $b ]
+then
+gg="PM"
+else
+gg="AM"
+fi
+curl -sS ifconfig.me > /etc/myipvps
+echo " "
+echo "=====================-[ SCRIPT zikra TUNNEL ]-===================="
+echo ""
+echo "------------------------------------------------------------"
+echo ""
+echo ""
+echo "   >>> Service & Port"  | tee -a log-install.txt
+echo "   - OpenSSH		: 22"  | tee -a log-install.txt
+echo "   - SSH Websocket	: 80 [ON]" | tee -a log-install.txt
+echo "   - SSH SSL Websocket	: 443" | tee -a log-install.txt
+echo "   - Stunnel4		: 447, 777" | tee -a log-install.txt
+echo "   - Dropbear		: 109, 143" | tee -a log-install.txt
+echo "   - Badvpn		: 7100-7900" | tee -a log-install.txt
+echo "   - Nginx		: 81" | tee -a log-install.txt
+echo "   - Vmess TLS		: 443" | tee -a log-install.txt
+echo "   - Vmess None TLS	: 80" | tee -a log-install.txt
+echo "   - Vless TLS		: 443" | tee -a log-install.txt
+echo "   - Vless None TLS	: 80" | tee -a log-install.txt
+echo "   - Trojan GRPC		: 443" | tee -a log-install.txt
+echo "   - Trojan WS		: 443" | tee -a log-install.txt
+echo "   - Trojan Go		: 443" | tee -a log-install.txt
+echo ""  | tee -a log-install.txt
+echo "   >>> Server Information & Other Features"  | tee -a log-install.txt
+echo "   - Timezone		: Asia/Jakarta (GMT +7)"  | tee -a log-install.txt
+echo "   - Fail2Ban		: [ON]"  | tee -a log-install.txt
+echo "   - Dflate		: [ON]"  | tee -a log-install.txt
+echo "   - IPtables		: [ON]"  | tee -a log-install.txt
+echo "   - Auto-Reboot		: [ON]"  | tee -a log-install.txt
+echo "   - IPv6			: [OFF]"  | tee -a log-install.txt
+echo "   - Autoreboot On	: $aureb:00 $gg GMT +7" | tee -a log-install.txt
+echo "   - AutoKill Multi Login User" | tee -a log-install.txt
+echo "   - Auto Delete Expired Account" | tee -a log-install.txt
+echo "   - Fully automatic script" | tee -a log-install.txt
+echo "   - VPS settings" | tee -a log-install.txt
+echo "   - Admin Control" | tee -a log-install.txt
+echo "   - Change port" | tee -a log-install.txt
+echo "   - Full Orders For Various Services" | tee -a log-install.txt
+echo ""
+echo ""
+echo "------------------------------------------------------------"
+echo ""
+echo "===============-[ Script Created By d zikra ]-==============="
+echo -e ""
+echo ""
+echo "" | tee -a log-install.txt
+rm /root/setup.sh >/dev/null 2>&1
+rm /root/ins-xray.sh >/dev/null 2>&1
+rm /root/insshws.sh >/dev/null 2>&1
+secs_to_human "$(($(date +%s) - ${start}))" | tee -a log-install.txt
+echo -e "
+"
+read -n 1 -s -r -p "Press any key to reboot"
+reboot
+ 
